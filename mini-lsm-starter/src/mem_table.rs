@@ -19,8 +19,9 @@ use std::ops::Bound;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
+use std::usize;
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use ouroboros::self_referencing;
@@ -51,9 +52,18 @@ pub(crate) fn map_bound(bound: Bound<&[u8]>) -> Bound<Bytes> {
 }
 
 impl MemTable {
+    pub fn new(wal: Option<Wal>, id: usize) -> Self {
+        MemTable {
+            map: Arc::new(SkipMap::new()),
+            wal,
+            id,
+            approximate_size: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
     /// Create a new mem-table.
     pub fn create(_id: usize) -> Self {
-        unimplemented!()
+        MemTable::new(None, 1)
     }
 
     /// Create a new mem-table with WAL
@@ -87,7 +97,8 @@ impl MemTable {
 
     /// Get a value by key.
     pub fn get(&self, _key: &[u8]) -> Option<Bytes> {
-        unimplemented!()
+        let k = Bytes::copy_from_slice(_key);
+        self.map.get(&k).map(|entry| entry.value().clone())
     }
 
     /// Put a key-value pair into the mem-table.
@@ -95,8 +106,12 @@ impl MemTable {
     /// In week 1, day 1, simply put the key-value pair into the skipmap.
     /// In week 2, day 6, also flush the data to WAL.
     /// In week 3, day 5, modify the function to use the batch API.
-    pub fn put(&self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        unimplemented!()
+    pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
+        // let gurad = &epoch::pin();
+        let k = Bytes::copy_from_slice(key);
+        let v = Bytes::copy_from_slice(value);
+        self.map.insert(k, v);
+        Ok(())
     }
 
     /// Implement this in week 3, day 5.
@@ -128,6 +143,11 @@ impl MemTable {
     pub fn approximate_size(&self) -> usize {
         self.approximate_size
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn approximate_size_add(&self, len: usize) {
+        self.approximate_size
+            .fetch_add(len, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Only use this function when closing the database
