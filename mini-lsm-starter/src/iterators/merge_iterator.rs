@@ -17,8 +17,10 @@
 
 use std::cmp::{self};
 use std::collections::BinaryHeap;
+use std::collections::binary_heap::PeekMut;
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
+use nom::Err;
 
 use crate::key::KeySlice;
 
@@ -59,7 +61,25 @@ pub struct MergeIterator<I: StorageIterator> {
 
 impl<I: StorageIterator> MergeIterator<I> {
     pub fn create(iters: Vec<Box<I>>) -> Self {
-        unimplemented!()
+        let mut heap = BinaryHeap::new();
+
+        let _ = iters.into_iter().enumerate().for_each(|(idx, iter)| {
+            let wrapper = HeapWrapper(idx, iter);
+            if wrapper.1.is_valid() {
+                heap.push(wrapper);
+            }
+        });
+
+        let mut current = None;
+
+        if let Some(inner) = heap.peek_mut() {
+            current = Some(PeekMut::pop(inner));
+        }
+
+        MergeIterator {
+            iters: heap,
+            current,
+        }
     }
 }
 
@@ -69,18 +89,59 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
     type KeyType<'a> = KeySlice<'a>;
 
     fn key(&self) -> KeySlice {
-        unimplemented!()
+        let iter = self.current.as_ref().unwrap();
+        iter.1.key()
     }
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        let iter = self.current.as_ref().unwrap();
+        iter.1.value()
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        match &self.current {
+            Some(HeapWrapper(size, iter)) => {
+                // println!("size: {}", size);
+                iter.is_valid()
+            }
+            None => false,
+        }
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        let mut key = KeySlice::from_slice(&[]);
+        let mut buf = Vec::new();
+        if let Some(mut iter) = self.current.take() {
+            buf.extend_from_slice(iter.1.key().raw_ref());
+            key = KeySlice::from_slice(&buf);
+            iter.1.next()?;
+            if iter.1.is_valid() {
+                self.iters.push(iter);
+            }
+        }
+
+        while let Some(mut inner) = self.iters.peek_mut() {
+            if inner.1.key().le(&key) {
+                while inner.1.key().le(&key) {
+                    match inner.1.next() {
+                        Err(e) => {
+                            PeekMut::pop(inner);
+                            return Err(e);
+                        }
+                        _ => {
+                            if !inner.1.is_valid() {
+                                PeekMut::pop(inner);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // println!("current assign");
+                self.current = Some(PeekMut::pop(inner));
+                break;
+            }
+        }
+        Ok(())
     }
 }

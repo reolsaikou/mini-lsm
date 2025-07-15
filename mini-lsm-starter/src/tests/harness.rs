@@ -189,10 +189,19 @@ where
 }
 
 pub fn expect_iter_error(mut iter: impl StorageIterator) {
+    let mut cnt = 0;
     loop {
         match iter.next() {
-            Ok(_) if iter.is_valid() => continue,
-            Ok(_) => panic!("expect an error"),
+            Ok(_) if iter.is_valid() => {
+                cnt += 1;
+                continue;
+            }
+            // Ok(_) => panic!("expect an error"),
+            Ok(_) => {
+                // println!("key: {} value: {}", iter.key(), iter.);
+                println!("loop {}", cnt);
+                panic!("expect an error");
+            }
             Err(_) => break,
         }
     }
