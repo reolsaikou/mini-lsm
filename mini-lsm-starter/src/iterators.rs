@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Debug;
+
 pub mod concat_iterator;
 pub mod merge_iterator;
 pub mod two_merge_iterator;
 
 pub trait StorageIterator {
-    type KeyType<'a>: PartialEq + Eq + PartialOrd + Ord
+    type KeyType<'a>: PartialEq + Eq + PartialOrd + Ord + Default + Debug + Clone
     where
         Self: 'a;
 

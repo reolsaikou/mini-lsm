@@ -89,21 +89,22 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
     type KeyType<'a> = KeySlice<'a>;
 
     fn key(&self) -> KeySlice {
-        let iter = self.current.as_ref().unwrap();
-        iter.1.key()
+        match &self.current {
+            Some(HeapWrapper(size, iter)) => iter.key(),
+            None => KeySlice::default(),
+        }
     }
 
     fn value(&self) -> &[u8] {
-        let iter = self.current.as_ref().unwrap();
-        iter.1.value()
+        match &self.current {
+            Some(HeapWrapper(size, iter)) => iter.value(),
+            None => &[],
+        }
     }
 
     fn is_valid(&self) -> bool {
         match &self.current {
-            Some(HeapWrapper(size, iter)) => {
-                // println!("size: {}", size);
-                iter.is_valid()
-            }
+            Some(HeapWrapper(size, iter)) => iter.is_valid(),
             None => false,
         }
     }
@@ -137,7 +138,6 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
                     }
                 }
             } else {
-                // println!("current assign");
                 self.current = Some(PeekMut::pop(inner));
                 break;
             }
